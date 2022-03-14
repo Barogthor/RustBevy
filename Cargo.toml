@@ -6,8 +6,16 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-deps = { path = "deps"}
+bevy = "0.6.1"
+bevy_ecs = "0.6.1"
+bevy_ui = "0.6.1"
+bevy_render = "0.6.1"
+bevy_sprite = "0.6.0"
+bevy_text = "0.6.0"
 
 [[example]]
 name = "breakout"
 path = "examples/breakout/breakout.rs"
+[[example]]
+name = "ui"
+path = "examples/ui/menu.rs"

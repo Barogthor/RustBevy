@@ -1,11 +1,30 @@
-use deps::bevy::{
+mod menu;
+
+use bevy::{
     core::FixedTimestep,
     prelude::*,
     sprite::collide_aabb::{collide, Collision},
 };
-use deps::bevy::app::AppExit;
-use deps::bevy_ecs;
-use deps::bevy_text;
+use bevy::app::AppExit;
+use bevy_ecs;
+use bevy_text;
+use bevy_ecs::schedule::ShouldRun;
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+enum AppState {
+    MainMenu,
+    InGame,
+    Paused,
+}
+
+fn run_if_game(stage: Res<AppState>) -> ShouldRun {
+    if stage.0 == AppState::InGame {
+        ShouldRun::YesAndCheckAgain
+    }
+    else {
+        ShouldRun::NoAndCheckAgain
+    }
+}
 
 /// An implementation of the classic game "Breakout"
 const TIME_STEP: f32 = 1.0 / 60.0;
@@ -13,17 +32,19 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .insert_resource(Scoreboard { score: 0 })
+        .insert_resource(AppState::InGame)
         .insert_resource(ClearColor(Color::rgb(0.9, 0.9, 0.9)))
         .add_startup_system(setup)
         .add_system_set(
             SystemSet::new()
-                .with_run_criteria(FixedTimestep::step(TIME_STEP as f64))
+                .with_run_criteria(run_if_game)
+                // .with_run_criteria(FixedTimestep::step(TIME_STEP as f64))
                 .with_system(paddle_movement_system)
                 .with_system(ball_collision_system)
                 .with_system(ball_movement_system),
         )
         .add_system(scoreboard_system)
-        .add_system(deps::bevy::input::system::exit_on_esc_system)
+        .add_system(bevy::input::system::exit_on_esc_system)
         .run();
 }
 
