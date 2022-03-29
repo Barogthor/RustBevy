@@ -10,7 +10,7 @@ use bevy::app::AppExit;
 use bevy_ecs;
 use bevy_text;
 use bevy_ecs::schedule::ShouldRun;
-use crate::game::{paddle_movement_system, ball_collision_system, ball_movement_system, setup_game, quit_game};
+use crate::game::{paddle_movement_system, ball_collision_system, ball_movement_system, setup_game, quit_game, throw_ball};
 use crate::menu::{setup_menu, button_system, close_menu};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -62,6 +62,7 @@ fn main() {
             SystemSet::on_update(AppState::InGame)
                 // .with_run_criteria(FixedTimestep::step(TIME_STEP as f64))
                 .with_system(paddle_movement_system)
+                .with_system(throw_ball)
                 .with_system(ball_collision_system)
                 .with_system(ball_movement_system)
                 .with_system(scoreboard_system)

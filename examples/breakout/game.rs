@@ -7,7 +7,8 @@ use bevy::app::AppExit;
 use bevy_ecs;
 use bevy_text;
 use crate::{TIME_STEP, Scoreboard};
-
+use bevy::input::keyboard::KeyboardInput;
+use bevy::input::ElementState;
 
 
 #[derive(Component)]
@@ -17,6 +18,12 @@ pub struct InGameEntity;
 pub struct Paddle {
     speed: f32,
 }
+
+#[derive(Component)]
+pub struct StickyPaddle;
+
+#[derive(Component)]
+pub struct BallStuck;
 
 #[derive(Component)]
 pub struct Ball {
@@ -48,6 +55,26 @@ pub fn setup_game(mut commands: Commands, asset_server: Res<AssetServer>) {
     // cameras
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
     commands.spawn_bundle(UiCameraBundle::default());
+    // ball
+
+    commands
+        .spawn_bundle(SpriteBundle {
+            transform: Transform {
+                scale: Vec3::new(30.0, 30.0, 0.0),
+                translation: Vec3::new(15.0, -185., 1.0),
+                ..Default::default()
+            },
+            sprite: Sprite {
+                color: Color::rgb(1.0, 0.5, 0.5),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .insert(InGameEntity)
+        .insert(BallStuck)
+        .insert(Ball {
+            velocity: 400.0 * Vec3::new(0.5, -0.5, 0.0).normalize(),
+        });
     // paddle
     commands
         .spawn_bundle(SpriteBundle {
@@ -64,25 +91,9 @@ pub fn setup_game(mut commands: Commands, asset_server: Res<AssetServer>) {
         })
         .insert(Paddle { speed: 500.0 })
         .insert(Collider::Paddle)
+        .insert(StickyPaddle)
         .insert(InGameEntity);
-    // ball
-    commands
-        .spawn_bundle(SpriteBundle {
-            transform: Transform {
-                scale: Vec3::new(30.0, 30.0, 0.0),
-                translation: Vec3::new(0.0, -50.0, 1.0),
-                ..Default::default()
-            },
-            sprite: Sprite {
-                color: Color::rgb(1.0, 0.5, 0.5),
-                ..Default::default()
-            },
-            ..Default::default()
-        })
-        .insert(InGameEntity)
-        .insert(Ball {
-            velocity: 400.0 * Vec3::new(0.5, -0.5, 0.0).normalize(),
-        });
+
     // scoreboard
     commands.spawn_bundle(TextBundle {
         text: Text {
@@ -228,9 +239,15 @@ pub fn setup_game(mut commands: Commands, asset_server: Res<AssetServer>) {
 
 pub fn paddle_movement_system(
     keyboard_input: Res<Input<KeyCode>>,
-    mut query: Query<(&Paddle, &mut Transform)>,
+    mut query: QuerySet<(
+        QueryState<(&Ball, &mut Transform, With<BallStuck>)>,
+        QueryState<(&Paddle, &mut Transform)>
+    )>
+    // mut query: Query<(&Paddle, &mut Transform)>,
+    // mut query_ball: Query<(&Ball, &mut Transform, With<BallStuck>)>,
 ) {
-    let (paddle, mut transform) = query.single_mut();
+    let mut query_paddle = query.q1();
+    let (paddle, mut transform) = query_paddle.single_mut();
     let mut direction = 0.0;
     if keyboard_input.pressed(KeyCode::Left) {
         direction -= 1.0;
@@ -242,24 +259,63 @@ pub fn paddle_movement_system(
 
     let translation = &mut transform.translation;
     // move the paddle horizontally
+    let old_x = translation.x;
     translation.x += direction * paddle.speed * TIME_STEP;
     // bound the paddle within the walls
     translation.x = translation.x.min(380.0).max(-380.0);
+    let new_x = translation.x;
+
+    let mut query_ball = query.q0();
+    if !query_ball.is_empty() {
+        let (_, mut ball_transform, _) = query_ball.single_mut();
+        let ball_translation = &mut ball_transform.translation;
+        ball_translation.x += new_x - old_x;
+
+    }
+
 }
 
-pub fn ball_movement_system(mut ball_query: Query<(&Ball, &mut Transform)>) {
-    let (ball, mut transform) = ball_query.single_mut();
+pub fn throw_ball(
+    mut keyboard_input_events: EventReader<KeyboardInput>,
+    query_paddle: Query<(Entity, &Paddle, With<StickyPaddle>)>,
+    query_ball: Query<(Entity, &Ball, With<BallStuck>)>,
+    mut commands: Commands
+) {
+    if query_paddle.is_empty() || query_ball.is_empty() {
+        return;
+    }
+    let (paddle_entity, _, _) = query_paddle.single();
+    let (ball_entity, _, _) = query_ball.single();
+
+    for event in keyboard_input_events.iter() {
+        if let Some(key_code) = event.key_code {
+            if event.state == ElementState::Pressed && key_code == KeyCode::Space {
+                commands.entity(paddle_entity).remove::<StickyPaddle>();
+                commands.entity(ball_entity).remove::<BallStuck>();
+            }
+        }
+    }
+}
+
+pub fn ball_movement_system(mut ball_query: Query<(&Ball, &mut Transform, Without<BallStuck>)>) {
+    if ball_query.is_empty() {
+        return;
+    }
+    let (ball, mut transform, _) = ball_query.single_mut();
     transform.translation += ball.velocity * TIME_STEP;
 }
 
 pub fn ball_collision_system(
     mut commands: Commands,
     mut scoreboard: ResMut<Scoreboard>,
-    mut ball_query: Query<(&mut Ball, &Transform)>,
-    collider_query: Query<(Entity, &Collider, &Transform)>,
+    mut ball_query: Query<(&mut Ball, &Transform, Without<BallStuck>)>,
+    collider_query: Query<(Entity, &Collider, &Transform )>,
     mut app_exit_events: EventWriter<AppExit>,
 ) {
-    let (mut ball, ball_transform) = ball_query.single_mut();
+    if ball_query.is_empty() {
+        return;
+    }
+    let (mut ball, ball_transform, _) = ball_query.single_mut();
     let ball_size = ball_transform.scale.truncate();
     let velocity = &mut ball.velocity;
 
